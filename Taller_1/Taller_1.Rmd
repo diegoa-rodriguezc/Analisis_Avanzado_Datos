@@ -1,0 +1,554 @@
+---
+title: "Taller 1"
+author: "Diego Alberto Rodríguez Cruz - Maestria en Matemáticas Aplicadas y Ciencias de la Computación"
+date: "`r Sys.Date()`"
+lang: es
+output:
+  rmdformats::downcute
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+set.seed(123)
+```
+
+------------------------------------------------------------------------
+
+# Dependencias
+
+-   ´install.packages("corrplot")´
+-   ´install.packages("readr")´
+-   ´install.packages("ggplot2")´
+-   ´install.packages("dplyr")´
+-   ´install.packages("ggbiplot")´
+-   ´install.packages("dendextend")´
+-   ´install.packages("crosstable")´
+-   ´install.packages("purrr")´
+-   ´install.packages("cluster")´
+-   ´install.packages("glmnet")´
+-   ´install.packages("car")´
+-   ´install.packages("tidyr")´
+-   ´install.packages("tibble")´
+
+# Librerías
+
+```{r warning=FALSE, message=FALSE}
+
+library(corrplot)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(ggbiplot)
+library(dendextend)
+library(crosstable)
+library(purrr)
+library(cluster)
+library(glmnet)
+library(Metrics)
+library(car)
+library(tidyr)
+library(tibble)
+```
+
+# Problema
+
+El conjunto de datos taller1.txt contiene la información del perfíl
+genómico de un conjunto de 1200 líneas celulares. Para estas se busca
+determinar cuáles de los 5000 genes (ubicados en cada columna) son de
+relevancia para la predicción de la variable respuesta (efectividad del
+tratamiento anticancer, medida como variable continua).
+
+```{r}
+# Carga de datos
+data <- read.delim2(file="taller1.txt", header=TRUE, sep = ",", dec = ".")
+
+head(data,10) #Mostrar los primeros 10 registros
+
+```
+
+Responda las siguientes preguntas:
+
+## P1
+
+¿Hay multicolinealidad en los datos?
+
+```{r}
+# Correlación
+#cor(data)
+mat_cor <- data %>% cor(method="pearson") %>% round(digits=2)
+#Matriz de correlación
+mat_cor
+```
+
+```{r}
+# Cálculo de la determinante de la matriz de correlación
+det(mat_cor)
+```
+
+-   La determinante de la matriz da 0, lo que significa que existe una
+    multicolinealidad perfecta del conjunto de datos suministrado.
+    Existe más columnas/variables (5000) que registros (1200), lo cual
+    genera una multicolinealidad perfecta entre las variables.
+
+## P2
+
+Separe aleatoriamente (pero guarde la semilla) su conjunto de datos en
+dos partes:
+
+-   Entrenamiento: 1000 líneas celulares
+
+-   Prueba: 200 líneas celulares
+
+```{r}
+set.seed(123)
+
+x <- data.frame(data[,2:5001]) # Se elimina la variable Y
+y <- data$y 
+
+dataSplit <- sample(nrow(x), 
+                    size=nrow(x)*0.834,
+                    replace = FALSE)
+
+# separar los datos entramiento y prueba
+train_x <- x[dataSplit, ]
+test_x <- x[-dataSplit, ]
+train_y <- y[dataSplit]
+test_y <- y[-dataSplit]
+
+
+train_x <- scale(train_x)
+test_x <- scale(test_x)
+train_y <- scale(train_y)
+test_y <- scale(test_y)
+```
+
+```{r}
+cat("Entrenamiento: ", nrow(train_x),"\n")
+cat("Prueba: ", nrow(test_x),"\n")
+
+```
+
+## P3
+
+Usando los 1000 datos de entrenamiento, determine los valores de
+$\lambda_r$ y $\lambda_l$ de regresión Ridge y Lasso, respectivamente,
+que minimicen el Error Cuadrático Medio (ECM) mediante validación
+externa. Utilice el método de validación externa que considere más
+apropiado.
+
+### Ridge
+
+```{r}
+set.seed(123)
+
+ridge <- glmnet::glmnet(train_x, train_y, alpha = 0)
+
+```
+
+```{r}
+set.seed(123)
+# Evolución de los coeficientes en función de lambda
+# ==============================================================================
+regularizacion_r <- ridge$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = ridge$lambda)
+
+regularizacion_r <- regularizacion_r %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+regularizacion_r %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  scale_x_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  labs(title = "Coeficientes de Ridge en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+```{r}
+set.seed(123)
+cv_error_r <- glmnet::cv.glmnet(train_x,train_y, alpha  = 0)
+
+# ECM para Ridge
+plot(cv_error_r)
+```
+
+```{r}
+cat("Ridge: Mejor Lambda encontrado = " , cv_error_r$lambda.min, "\n")
+cat("Ridge: Mejor valor de lambda encontrado + 1 desviación estándar:", cv_error_r$lambda.1se, "\n")
+
+```
+
+### Lasso
+
+```{r}
+set.seed(123)
+lasso <- glmnet::glmnet(train_x, train_y, alpha = 1)
+```
+
+```{r}
+set.seed(123)
+# Evolución de los coeficientes en función de lambda
+# ==============================================================================
+regularizacion_l <- lasso$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = lasso$lambda)
+
+regularizacion_l <- regularizacion_l %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+regularizacion_l %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  scale_x_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  labs(title = "Coeficientes del Lasso en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+```{r}
+set.seed(123)
+cv_error_l <- glmnet::cv.glmnet(train_x,train_y, alpha  = 1)
+
+# ECM para Ridge
+plot(cv_error_l)
+```
+
+```{r}
+cat("Lasso: Mejor Lambda encontrado = " , cv_error_l$lambda.min, "\n")
+cat("Lasso: Mejor valor de lambda encontrado + 1 desviación estándar:", cv_error_l$lambda.1se, "\n")
+```
+
+## P4
+
+Ajuste la regresión Ridge y Lasso con los valores estimados de
+$\lambda_r$ y $\lambda_l$ obtenidos en (3) usando los 1000 datos de
+entrenamiento.
+
+### Ridge
+
+```{r}
+set.seed(123)
+
+ridge_n2 <- glmnet::glmnet(
+  train_x, 
+  train_y, 
+  alpha = 0, 
+  lambda = cv_error_r$lambda.1se)
+
+```
+
+```{r}
+set.seed(123)
+# Evolución de los coeficientes en función de lambda
+# ==============================================================================
+regularizacion_r2 <- ridge_n2$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = ridge_n2$lambda)
+
+regularizacion_r2 <- regularizacion_r2 %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+regularizacion_r2 %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor, group=1)) +
+  geom_line() +
+  scale_x_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  labs(title = "Coeficientes de Ridge_n2 en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+### Lasso
+
+```{r}
+set.seed(123)
+
+lasso_n2 <- glmnet::glmnet(
+  train_x, 
+  train_y, 
+  alpha = 1,
+  lambda = cv_error_l$lambda.1se)
+
+```
+
+```{r}
+set.seed(123)
+# Evolución de los coeficientes en función de lambda
+# ==============================================================================
+regularizacion_l2 <- lasso_n2$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = lasso_n2$lambda)
+
+regularizacion_l2 <- regularizacion_l2 %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+regularizacion_l2 %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor, group=1)) +
+  geom_line() +
+  scale_x_log10(
+    breaks = trans_breaks("log10", function(x) 10^x),
+    labels = trans_format("log10", math_format(10^.x))
+  ) +
+  labs(title = "Coeficientes de Lasso_n2 en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+## P5
+
+Para los modelos ajustados en (4) determine el más apropiado para
+propósitos de predicción. Considere unicamente el ECM en los 200 datos
+de prueba para su decisión.
+
+### Ridge
+
+#### Entrenamiento
+
+```{r}
+set.seed(123)
+predicciones_train_r <- predict(ridge_n2, newx = train_x)
+```
+
+```{r}
+set.seed(123)
+training_mse_r <- mean((predicciones_train_r - train_y)^2)
+cat("Ridge - Error (MSE/ECM) de entrenamiento:", training_mse_r)
+```
+
+#### Prueba
+
+```{r}
+set.seed(123)
+predicciones_test_r <- predict(ridge_n2, newx = test_x)
+```
+
+```{r}
+set.seed(123)
+test_mse_ridge <- mean((predicciones_test_r - test_y)^2)
+paste("Ridge - Error (MSE/ECM) de test:", test_mse_ridge)
+```
+
+### Lasso
+
+#### Entrenamiento
+
+```{r}
+set.seed(123)
+predicciones_train_l <- predict(lasso_n2, newx = train_x)
+```
+
+```{r}
+set.seed(123)
+training_mse_l <- mean((predicciones_train_l - train_y)^2)
+cat("Lasso - Error (MSE/ECM) de entrenamiento:", training_mse_l)
+```
+
+#### Prueba
+
+```{r}
+set.seed(123)
+predicciones_test_l <- predict(lasso_n2, newx = test_x)
+```
+
+```{r}
+set.seed(123)
+test_mse_lasso <- mean((predicciones_test_l - test_y)^2)
+paste("Lasso - Error (MSE/ECM) de test:", test_mse_lasso)
+```
+
+## P6
+
+Ajuste el modelo seleccionado en (5) para los 1200 datos. Note que en
+este punto ya tiene un $\lambda$ estimado y un modelo seleccionado.
+
+### Ridge
+
+```{r}
+set.seed(123)
+
+ridge_full <- glmnet::glmnet(
+  x, 
+  y, 
+  alpha = 0, 
+  lambda = cv_error_r$lambda.1se)
+```
+
+#### Entrenamiento
+
+```{r}
+set.seed(123)
+predicciones_train_rf <- predict(ridge_full, newx = train_x)
+```
+
+```{r}
+set.seed(123)
+training_mse_rf <- mean((predicciones_train_rf - train_y)^2)
+paste("Ridge - Error (MSE/ECM) de test:", training_mse_rf)
+```
+
+#### Prueba
+
+```{r}
+set.seed(123)
+predicciones_test_rf <- predict(ridge_full, newx = test_x)
+```
+
+```{r}
+set.seed(123)
+test_mse_ridge_rf <- mean((predicciones_test_rf - test_y)^2)
+paste("Ridge - Error (MSE/ECM) de test:", test_mse_ridge_rf)
+```
+
+### Lasso
+
+```{r}
+set.seed(123)
+
+lasso_full <- glmnet::glmnet(
+  x, 
+  y, 
+  alpha = 0, 
+  lambda = cv_error_l$lambda.1se)
+```
+
+#### Entrenamiento
+
+```{r}
+set.seed(123)
+predicciones_train_lf <- predict(lasso_full, newx = train_x)
+```
+
+```{r}
+set.seed(123)
+training_mse_lf <- mean((predicciones_train_lf - train_y)^2)
+cat("Lasso - Error (MSE/ECM) de entrenamiento:", training_mse_lf)
+```
+
+#### Prueba
+
+```{r}
+set.seed(123)
+predicciones_test_lf <- predict(lasso_full, newx = test_x)
+```
+
+```{r}
+set.seed(123)
+test_mse_lasso_f <- mean((predicciones_test_lf - test_y)^2)
+paste("Lasso - Error (MSE/ECM) de test:", test_mse_lasso_f)
+```
+
+## P7
+
+Grafique las trazas de los coeficientes en función de la penalización
+para el modelo ajustado en (6).
+
+### Ridge
+
+```{r}
+set.seed(123)
+
+# Coeficientes del modelo Ridge con los 1200 registros
+df_coeficientes_rf <- coef(ridge_full) %>%
+                   as.matrix() %>%
+                   as_tibble(rownames = "predictor") %>%
+                   dplyr::rename(coeficiente = s0)
+
+df_coeficientes_rf %>%
+  filter(predictor != "(Intercept)") %>%
+  ggplot(aes(x = predictor, y = coeficiente)) +
+  geom_col() +
+  labs(title = "Coeficientes del modelo Ridge") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 6, angle = 45))
+```
+
+```{r}
+set.seed(123)
+df_coeficientes_rf %>%
+  filter(
+    predictor != "(Intercept)",
+    coeficiente != 0
+) 
+```
+
+### Lasso
+
+```{r}
+set.seed(123)
+
+# Coeficientes del modelo Lasso con los 1200 registros
+df_coeficientes_lf <- coef(lasso_full) %>%
+                   as.matrix() %>%
+                   as_tibble(rownames = "predictor") %>%
+                   dplyr::rename(coeficiente = s0)
+
+df_coeficientes_lf %>%
+  filter(predictor != "(Intercept)") %>%
+  ggplot(aes(x = predictor, y = coeficiente)) +
+  geom_col() +
+  labs(title = "Coeficientes del modelo Lasso") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 6, angle = 45))
+```
+
+```{r}
+set.seed(123)
+df_coeficientes_lf %>%
+  filter(
+    predictor != "(Intercept)",
+    coeficiente != 0
+) 
+```
+
+```{r}
+plot(lasso_full, xvar = "lambda", label = TRUE)
+```
+
+## P8
+
+En un párrafo resuma los resultados obtenidos dado el objetivo inicial
+del estudio.
+
+**R:/** De acuerdo a los resultados obtenidos previamente, se evidencia:
+
+1.  El modelo Lasso contiene mejores $\lambda$ que el modelo Ridge
+2.  El modelo Lasso presenta menor ECM (Error Cuadratico Medio), lo que
+    lo hace mejor para los datos suministrados.
+3.  Se evidencia que los datos presentan multicolinealidad perfecta dado
+    el números de registros vs variables.
