@@ -1,0 +1,533 @@
+---
+title: "Taller 2"
+author: "Diego Alberto Rodríguez Cruz - Maestria en Matemáticas Aplicadas y Ciencias de la Computación"
+date: "`r Sys.Date()`"
+lang: es
+output:
+  rmdformats::downcute
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+semilla <- 123 #Definicion del valor de la semilla
+set.seed(semilla)
+```
+
+------------------------------------------------------------------------
+
+# Dependencias
+
+-   ´install.packages("ISLR2")´
+-   ´install.packages("tibble")´
+-   ´install.packages("corrplot")´
+-   ´install.packages("caret")´
+-   ´install.packages("splines")´
+
+# Librerías
+
+```{r warning=FALSE, message=FALSE}
+#Carga de librerias
+library(ISLR2)
+library(tibble)
+library(corrplot)
+library(caret)
+library(splines)
+```
+
+# Variable(s) global(es)
+
+```{r warning=FALSE, message=FALSE}
+#Definicion del valor de la semilla global
+semilla <- 123
+```
+
+# Problema 1
+
+El conjunto de datos **Auto** en la librería **ISLR2**, utilizado en
+clase, contiene la información del rendimiento y otras variables para un
+total de 392 vehículos. Como nos dimos cuenta, la relación entre dos de
+sus variables (horsepower y mpg) es resumida de manera parsimoniosa
+mediante un polinomio global de grado 2, sin embargo un spline suavizado
+(smoothing spline) parece dar un menor error de predicción. Por otra
+parte, determinar la ubicación y cantidad de knots en el spline de
+regresión (regression spline) fue un problema que desincentivó su uso.
+El método de validación externa utilizado para comprar los modelos fue
+validación regular
+
+```{r}
+set.seed(semilla)
+# Carga de datos 
+data<-Auto
+```
+
+```{r}
+set.seed(semilla)
+
+# Visualización de datos
+head(data)
+```
+
+```{r}
+set.seed(semilla)
+
+# Cantidad columnas
+cat("Cantidad de columnas ", ncol(data) , "\n")
+#Cantidad de registros
+cat("Cantidad de registros ", nrow(data) , "\n")
+```
+
+```{r}
+set.seed(semilla)
+
+# Resumen estadistico del conjunto de datos
+summary(data)
+```
+
+```{r}
+set.seed(semilla)
+
+# Correlación entre las variables númericas
+mat_cor <- data[,c(1:8)] %>% cor(method="pearson") %>% round(digits=2)
+
+#Matriz de correlación
+mat_cor
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+# Mapa de calor de la correlación
+corrplot(mat_cor, 
+         method = "color",
+         addgrid.col = 'white',
+         number.cex = 0.8,
+         addCoef.col = "white"
+         )
+```
+
+```{r}
+set.seed(semilla)
+# Cálculo de la determinante de la matriz de correlación
+det(mat_cor)
+```
+
+La respuesta de la determinante indica que no existe multicolinealidad
+perfecta entre las variables númericas del conjunto de datos
+
+## Punto 1
+
+Separe aleatoriamente (pero guarde la semilla) su conjunto de datos en
+dos partes:
+
+```{r}
+set.seed(semilla)
+sample_size <- nrow(data)
+
+idx_train <- sample(sample_size, 0.9*sample_size, replace = FALSE)
+idx_test <- seq(sample_size)[!seq(sample_size) %in% idx_train]
+
+train <- data[idx_train,]
+test <- data[idx_test,]
+
+```
+
+```{r}
+set.seed(semilla)
+
+cat("Cantidad de registros de entrenamiento:", nrow(train), "\n")
+cat("Cantidad de registros de prueba:",nrow(test ), "\n")
+
+```
+
+```{r}
+set.seed(semilla)
+# Visualización de datos en las variables de interes
+plot(data[,c("horsepower","mpg")],
+     xlab="HP",
+     ylab="mpg"
+     )
+```
+
+## Punto 2
+
+Usando los datos de entrenamiento Mediante validación cruzada en 10
+folds, determine el número óptimo de knots para el problema de regresión
+spline. Considere como número de posible de knots 1,...,10, igualmente
+espaciados en el rango de la variable horsepower. ¿Qué modelo (es decir,
+cual valor de knot con k = 1, ..., 10) resulta en un menor ECM de
+predición?
+
+```{r warning=FALSE}
+set.seed(semilla)
+# Definición de K
+k <- 10
+
+# Definir el rango de posibles valores de knots
+knots <- seq(min(train$horsepower), max(train$horsepower), length.out = k)
+
+for (i in 1:length(knots)) {
+  cat("Knots #",i, " valor:", knots[i],"\n")
+}
+
+# Inicializar el vector para almacenar los ECM de predicción
+cv_errors <- rep(0, length(knots))
+
+# Realizar la validación cruzada en 10 folds
+folds <- cut(seq(1, nrow(train)), breaks = 10, labels = FALSE)
+
+for (i in 1:length(knots)) {
+  # Ajustar el modelo con el número de knots actual
+  fit <- lm(mpg ~ bs(horsepower, knots = knots[i]), data = train)
+  # Calcular el ECM de predicción en cada fold
+  cv_errors[i] <- mean(sapply(1:10, function(j) {
+    pred <- predict(fit, newdata = train[folds == j, ])
+    actual <- train$mpg[folds == j]
+    mean((actual - pred)^2)
+  }))
+}
+
+# Encontrar el número de knots que minimiza el ECM promedio
+opt_knots <- knots[which.min(cv_errors)]
+
+
+```
+
+```{r}
+cat("Número óptimo de knots:", which.min(cv_errors), " con valor ", opt_knots, "\n")
+cat("ECM de predicción correspondiente:", cv_errors[which.min(cv_errors)], "\n")
+```
+
+El modelo con menor ECM de predicción es el que utilizo el Knots = 2.
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+xvals = data.frame(
+  horsepower = seq(min(data$horsepower),
+                   max(data$horsepower,by=1)
+                   )
+  )
+
+plot(train$horsepower,train$mpg,xlab="HP",ylab="mpg",pch=2)
+lines(xvals$horsepower,predict(fit,xvals),lwd=2,col="green")
+
+```
+
+## Punto 3
+
+Usando los datos de entrenamiento, determine el mejor modelo basado en
+base de funciones Compare el poder de predicción de los modelos:
+polinomio grado 2 global, spline suavizado y del modelo de regresión
+spline óptimo (encontrado en el punto anterior) utilizando validación
+cruzada en 10 folds. ¿Cuál de los tres modelos seleccionaría basado en
+el ECM de predición?.
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo polinomial grado 2 Global
+poly_fit <- lm(mpg ~ horsepower + I(horsepower^2), data = train)
+
+folds <- cut(seq(1, nrow(train)), breaks = 10, labels = FALSE)
+
+poly_cv_errors <- sapply(1:10, function(i) {
+  pred <- predict(poly_fit, newdata = train[folds == i, ])
+  actual <- train$mpg[folds == i]
+  mean((actual - pred)^2)
+})
+
+poly_cv_error_mean <- mean(poly_cv_errors)
+
+cat("ECM promedio para polinomio grado 2 Global:", poly_cv_error_mean, "\n")
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo spline suavizado
+smooth_spline_fit <- smooth.spline(train$horsepower, train$mpg)
+
+folds <- cut(seq(1, nrow(train)), breaks = 10, labels = FALSE)
+
+smooth_spline_cv_errors <- sapply(1:10, function(i) {
+  pred <- predict(smooth_spline_fit, newdata = train[folds == i, ])
+  actual <- train$mpg[folds == i]
+  mean((actual - pred$y)^2)
+})
+
+smooth_spline_cv_error_mean <- mean(smooth_spline_cv_errors)
+
+cat("ECM promedio para spline suavizado:", smooth_spline_cv_error_mean, "\n")
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Spline Óptimo
+opt_spline_fit <- lm(mpg ~ ns(horsepower, knots = opt_knots), data = train)
+
+
+opt_spline_cv_errors <- sapply(1:10, function(i) {
+  pred <- predict(opt_spline_fit, newdata = train[folds == i, ])
+  actual <- train$mpg[folds == i]
+  mean((actual - pred)^2)
+})
+
+opt_spline_cv_error_mean <- mean(opt_spline_cv_errors)
+
+cat("ECM promedio para regresión spline óptimo:", opt_spline_cv_error_mean, "\n")
+
+```
+
+El mejor modelo obtenido en la validación cruzada con 10 folds es el de
+polinomio grado 2 Global con un valor de ECM = 18.69866
+
+## Punto 4
+
+Usando los datos de entrenamiento, determine el mejor modelo basado en
+regresión local Determine la regresión polinomial local con kernel
+gaussiano que resulte en menor error de predicción: regresión de grado 1
+o 2. Use el ancho de banda óptimo dado por defecto por la función
+loess().
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Grado 0
+loess_fit0 <- loess(mpg ~ horsepower, data = train, degree = 0)
+# Grado 1
+loess_fit1 <- loess(mpg ~ horsepower, data = train, degree = 1)
+# Grado 2
+loess_fit2 <- loess(mpg ~ horsepower, data = train, degree = 2)
+
+# Predicción para cada modelo
+pred0 <- predict(loess_fit0, newdata = test)
+pred1 <- predict(loess_fit1, newdata = test)
+pred2 <- predict(loess_fit2, newdata = test)
+
+# Extración de variable mpg
+actual <- test$mpg 
+
+# ECM
+error0 <- mean((actual - pred0)^2)
+error1 <- mean((actual - pred1)^2)
+error2 <- mean((actual - pred2)^2)
+
+#
+cat("ECM para regresión local de grado 0:", error0, "\n")
+cat("ECM para regresión local de grado 1:", error1, "\n")
+cat("ECM para regresión local de grado 2:", error2, "\n")
+```
+
+```{r}
+set.seed(semilla)
+# Calcular el menos ECM entre los modelos de regresión grado 0,1,2
+ecm <- c(error0, error1, error2)
+opt_ecm <- which.min(ecm)
+
+# Modelo óptimo
+cat("En Regresión Local, el modelo con grado ", opt_ecm-1, "es el mejor con ECM: ", ecm[opt_ecm], "\n")
+```
+
+## Punto 5
+
+Usando los datos de entrenamiento y de prueba, determine el mejor de los
+tres paradigmas de modelamiento. Ajuste el mejor modelo basado en base
+de funciones, el mejor modelo basado en regresión local y un polinomio
+global de grado dos con los datos de entrenamiento y calcule el ECM de
+prueba para cada modelo.
+
+```{r}
+set.seed(semilla)
+# Modelo en base de funciones
+poly_fit <- lm(mpg ~ poly(horsepower, 2), data = train)
+
+# Modelo de regresión local
+loess_fit <- loess(mpg ~ horsepower, data = train, degree = 1)
+
+# Ajustar un polinomio global de grado dos
+global_poly_fit <- lm(mpg ~ horsepower + I(horsepower^2), data = train)
+
+# Predicción de cada modelo utilizando
+pred_poly <- predict(poly_fit, newdata = test)
+pred_loess <- predict(loess_fit, newdata = test)
+pred_global_poly <- predict(global_poly_fit, newdata = test)
+
+# Extración de variable mpg
+actual <- test$mpg
+
+# ECM
+error_poly <- mean((actual - pred_poly)^2)
+error_loess <- mean((actual - pred_loess)^2)
+error_global_poly <- mean((actual - pred_global_poly)^2)
+
+cat("1. ECM modelo de base de funciones:", error_poly, "\n")
+cat("2. ECM modelo de regresión local:", error_loess, "\n")
+cat("3. ECM polinomio global de grado dos:", error_global_poly, "\n")
+
+```
+
+```{r}
+set.seed(semilla)
+best_model <- which.min(c(error_poly, error_loess, error_global_poly))
+cat("El mejor modelo es el # ", best_model, " correspondiente al polinomio global grado dos")
+```
+
+## Punto 6
+
+Repita (1) - (5) un total de 10 veces de manera que en el paso (1)
+conforme una nueva muestra de validación cruzada, esto le permitirá
+obtener 10 ECM de prueba para cada paradigma de modelamiento. Grafique
+las tres distribuciones del ECM de prueba y responda ¿Cuál acercmiento
+seleccionaría basado en el ECM de predición: basado en base de
+funciones, basado en regresión local o polinomial global?.
+
+```{r}
+# Nuevo valor de semilla para generar valores distintos
+semilla <-456
+```
+
+```{r}
+set.seed(semilla)
+
+# Vector para guardar los errores cuadráticos medios de prueba
+mse_base <- numeric(10)
+mse_regloc <- numeric(10)
+mse_poly <- numeric(10)
+
+# Repetir 10 veces
+for (i in 1:10) {
+  
+  # Split de datos
+  sample_size <- nrow(data)
+
+  idx_train <- sample(sample_size, 0.9*sample_size, replace = FALSE)
+  idx_test <- seq(sample_size)[!seq(sample_size) %in% idx_train]
+  
+  train_cv <- data[idx_train,]
+  test_cv <- data[idx_test,]
+
+  
+  # Basado en funciones
+  poly_model <- lm(mpg ~ poly(horsepower, 2), data = train_cv)
+  
+  # Regresión local
+  regloc_model <- loess(mpg ~ horsepower, data = train_cv, span = 0.75)
+  
+  # Polinomio global de grado 2
+  global_model <- lm(mpg ~ horsepower + I(horsepower^2), data = train_cv)
+  
+  # Calcular el error cuadrático medio de prueba para cada modelo
+  mse_base[i] <- mean((predict(poly_model, test_cv) - test_cv$mpg)^2)
+  mse_regloc[i] <- mean((predict(regloc_model, test_cv) - test_cv$mpg)^2)
+  mse_poly[i] <- mean((predict(global_model, test_cv) - test_cv$mpg)^2)
+}
+
+```
+
+```{r}
+# boxplot ECM de prueba
+par(mfrow = c(1,3))
+hist(mse_base, main = "Base de funciones", xlab = "ECM de prueba")
+hist(mse_regloc, main = "Regresión local", xlab = "ECM de prueba")
+hist(mse_poly, main = "Polinomio global de grado 2", xlab = "ECM de prueba")
+```
+
+```{r}
+# boxplot ECM de prueba
+par(mfrow = c(1,3))
+boxplot(mse_base, main = "Base de funciones", xlab = "ECM de prueba")
+boxplot(mse_regloc, main = "Regresión local", xlab = "ECM de prueba")
+boxplot(mse_poly, main = "Polinomio global de grado 2", xlab = "ECM de prueba")
+```
+
+```{r}
+min_mse_base <- mse_base[which.min(mse_base)]
+cat("Base Funciones:",min_mse_base,"\n")
+min_mse_regloc <- mse_regloc[which.min(mse_regloc)]
+cat("Regresión local:",min_mse_regloc,"\n")
+min_mse_poly <- mse_poly[which.min(mse_poly)]
+cat("Polinomio global de grado 2:",min_mse_poly,"\n")
+```
+
+```{r}
+summary(mse_base)
+summary(mse_regloc)
+summary(mse_poly)
+```
+
+Teniendo en cuentas las gráficas generadas, se evidencia el de regresión
+local con la mejor distribución de datos.
+
+# Problema 2
+
+En el contexto de análisis de datos funcionales se tiene una colección
+finita de observaciones ruidosas, donde para cada individuo, estas se
+asumen provenientes de una curva de dimensión infinita la cual es
+evaluada en puntos de un intervalo determinado. Para la i-ésima unidad
+estadística se tiene un conjunto de $n_i$ observaciones discretizadas
+$x_{i1}$, ..., $x_{ij}$, ..., $x_{in_{i}}$ de la función $x_{i}$ en los
+puntos $t_{i1}$, ..., $t_{ij}$, ..., $t_{in_{i}}$ con $x_{ij}$ $\in$
+$R$, $t_{ij}$ $\in$ $T$ y $T$ un intervalo que representa el dominio
+sobre los reales donde se definen los datos funcionales.
+
+## Punto 7
+
+Escriba el estimador de Nadarya-Watson para la i-ésima unidad
+estadística en t, es decir, x(t).
+
+**R:/**
+
+$$\hat{x}(t) = \frac{\sum_{j=1}^{n} K\left(\frac{t - t_{ij}}{h}\right) x_{i}(t_{ij})}{\sum_{j=1}^{n} K\left(\frac{t - t_{ij}}{h}\right)}$$
+
+donde,
+
+-   $\hat{x}(t)$ es el valor estimado de la función $x(t)$,
+-   $K$ es una función núcleo simétrica y acotada,
+-   $h$ es el ancho de banda
+-   $n$ es el número de observaciones.
+
+## Punto 8
+
+Escriba el estimador de Nadarya-Watson para la función media en $t$, es
+decir, $\hat{\mu}(t)$. Note que todos los datos discretizados son
+utilizados en la estimación de la función media.
+
+**R:/**
+
+$$\hat{\mu}(t) = \frac{\sum_{i=1}^{m} \sum_{j=1}^{n} K\left(\frac{t - t_{ij}}{h}\right) x_{i}(t_{ij})}{\sum_{i=1}^{m} \sum_{j=1}^{n} K\left(\frac{t - t_{ij}}{h}\right)}$$
+
+donde,
+
+-   $\hat{\mu}(t)$ es el valor estimado de la función media en el punto
+    $t$,
+-   $K$ es una función núcleo simétrica y acotada,
+-   $h$ es el ancho de banda
+-   $m$ es el número de unidades estadísticas.
+
+# Bibliografía
+
+Parra, F. (s. f.). 8 Series Temporales \| Estadística y Machine Learning
+con R. <https://bookdown.org/content/2274/series-temporales.html>
+
+Rodríguez Casal, A. (s. f.). Estimación de la regresión.
+<http://eio.usc.es/eipc1/BASE/BASEMASTER/FORMULARIOS-PHP/MATERIALESMASTER/Mat_9_estimacion-regresion2.pdf>
+
+Larroca, F. (s. f.). Regresión no paramétrica. Introducción al estimador
+de Nadaraya-Watson.
+<https://www.fing.edu.uy/iie/ense/asign/tes/materiales/monografias/monografiaTES%20Larroca.pdf>
+
+Abad, R. C., & Casal, R. F. (s. f.). 7.1 Estimador de Nadaraya-Watson \|
+Técnicas de Remuestreo. Recuperado 5 de mayo de 2023, de
+<https://rubenfcasal.github.io/book_remuestreo/nadaraya-watson.html>
+
+Hansen, B. E. (s. f.). Uniform Convergence Rates for Nonparametric
+Estimation. <https://www3.nd.edu/~meg/MEG2004/Hansen-Bruce.pdf>
+
+Hansen, B. E. (2008). UNIFORM CONVERGENCE RATES FOR KERNEL ESTIMATION
+WITH DEPENDENT DATA. Econometric Theory, 24(3), 726-748.
+<https://doi.org/10.1017/S0266466608080304>
