@@ -1,0 +1,1105 @@
+---
+title: "Modelo Elastic Net"
+subtitle: "Maestria en Matemáticas Aplicadas y Ciencias de la Computación"
+author:
+- "Jorge Esneider Henao"
+- "Diego Alberto Rodríguez Cruz"
+- "Hector Leandro Rojas"
+date: "`r Sys.Date()`"
+lang: es
+output:
+  rmdformats::downcute
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+------------------------------------------------------------------------
+
+# Dependencias
+
+-   ´install.packages("lasso2")´
+-   ´install.packages("tidyverse")´
+-   ´install.packages("FSelectorRcpp")´
+-   ´install.packages("tibble")´
+-   ´install.packages("mlr")´
+-   ´install.packages("parallel")´
+-   ´install.packages("parallelMap")´
+-   ´install.packages("kknn")´
+-   ´install.packages("plotmo")´
+-   ´install.packages("corrplot")´
+-   ´install.packages("glmnet")´
+
+# Librerías
+
+```{r warning=FALSE}
+library(lasso2)
+library(tidyverse)
+library(FSelectorRcpp)
+library(tibble)
+library(mlr)
+library(parallel)
+library(parallelMap)
+library(kknn)
+library(plotmo)
+library(corrplot)
+library(glmnet)
+```
+
+# Variable(s) Global(es)
+
+```{r warning=FALSE, message=FALSE}
+#Definicion del valor de la semilla global
+semilla <- 123456
+set.seed(semilla)
+```
+
+# Dataset(s) aplicando Elastic Net
+
+-   [Energy Effiency](#energy_efficiency)
+-   [Boston Housing](#BostonHousing)
+-   [CO2](#CO2)
+-   [Iowa](#iowa)
+
+# Energy Effiency {#energy_efficiency}
+
+Dataset (Conjunto de datos) tomado de
+<https://archive.ics.uci.edu/dataset/242/energy+efficiency>. Este
+estudio analizó la evaluación de los requisitos de carga de calefacción
+y refrigeración de los edificios (es decir, la eficiencia energética) en
+función de los parámetros del edificio. El conjunto de datos comprende
+768 muestras y 8 características
+
+| Variable | Descripción               |
+|----------|---------------------------|
+| X1       | Relative Compactness      |
+| X2       | Surface Area              |
+| X3       | Wall Area                 |
+| X4       | Roof Area                 |
+| X5       | Overall Height            |
+| X6       | Orientation               |
+| X7       | Glazing Area              |
+| X8       | Glazing Area Distribution |
+| y1       | Heating Load              |
+| y2       | Cooling Load              |
+
+```{r warning=FALSE, error=FALSE}
+set.seed(semilla)
+
+#Carga de datos
+orig <- read.delim2(file="ENB2012_data.csv", header=TRUE, sep = ",", dec = ".")
+
+#solo se va tomar la variable Y1, por ende se elimina Y2
+data <- orig[, -which(names(orig) == "Y2")]
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Visualizacion de datos cargados
+head(data)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Correlación entre las variables númericas
+mat_cor <- data %>% cor(method="pearson") %>% round(digits=2)
+
+# Mapa de calor de la correlación
+corrplot(mat_cor, 
+         method = "color",
+         addgrid.col = 'white',
+         number.cex = 0.8,
+         addCoef.col = "white"
+         )
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Cantidad de Nulos/Vacios en el dataset
+sum(is.na(data))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Ubicacion de los valores nulos en las columnas
+sapply(data, function(x)sum(is.na(x)))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+dataGather <- gather(data, "Variable", "Value", -Y1)
+ggplot(dataGather, aes(Value, Y1)) +
+  facet_wrap(~ Variable, scales = "free_x") +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_bw()
+  #theme(axis.text.x = element_text(angle = 90))
+
+```
+
+## Ridge
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+dataTask <- makeRegrTask(data = data, target = "Y1")
+ridge <- makeLearner("regr.glmnet", alpha = 0, id = "ridge")
+
+```
+
+### Visualización de Datos Filtrados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+filterVals <- generateFilterValuesData(dataTask)
+plotFilterValues(filterVals) + 
+  theme_bw()
+```
+
+### Mejorando hiperparámetros lambda (s)
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeParamSpace <- makeParamSet(
+  makeNumericParam("s", lower = 0, upper = 15))
+
+randSearch <- makeTuneControlRandom(maxit = 200)
+cvForTuning <- makeResampleDesc("RepCV", folds = 3, reps = 10)
+
+
+parallelStartSocket(cpus = detectCores())
+tunedRidgePars <- tuneParams(ridge, task = dataTask,
+                             resampling = cvForTuning,
+                             par.set = ridgeParamSpace,
+                             control = randSearch)
+parallelStop()
+tunedRidgePars
+```
+
+### Visualización de los hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeTuningData <- generateHyperParsEffectData(tunedRidgePars)
+plotHyperParsEffect(ridgeTuningData, 
+                    x = "s", 
+                    y = "mse.test.mean",
+                    plot.type = "line") +
+  theme_bw()
+```
+
+### Entrenamiento con Ridge usando los parametros de lambda ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedRidge <- setHyperPars(ridge, par.vals = tunedRidgePars$x)
+tunedRidgeModel <- train(tunedRidge, dataTask)
+```
+
+### Coeficientes del modelo
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeModelData <- getLearnerModel(tunedRidgeModel)
+ridgeCoefs <- coef(ridgeModelData, s = tunedRidgePars$x$s)
+ridgeCoefs
+```
+
+### Visualización de coeficientes
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lmCoefs <- coef(lm(Y1 ~ ., data = data))
+
+coefTib <- tibble(Coef = rownames(ridgeCoefs)[-1],
+                  Ridge = as.vector(ridgeCoefs)[-1],
+                  Lm = as.vector(lmCoefs)[-1]
+)
+
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", col = "black") +
+  facet_wrap(~Model) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+```
+
+## LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lasso <- makeLearner("regr.glmnet", alpha = 1, id = "lasso")
+```
+
+### Ajuste de parámetros lambda de LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoParamSpace <- makeParamSet(
+makeNumericParam("s", lower = 0, upper = 15))
+parallelStartSocket(cpus = detectCores())
+tunedLassoPars <- tuneParams(lasso, task = dataTask,
+resampling = cvForTuning,
+par.set = lassoParamSpace,
+control = randSearch)
+parallelStop()
+tunedLassoPars
+```
+
+### Visualización de hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoTuningData <- generateHyperParsEffectData(tunedLassoPars)
+plotHyperParsEffect(lassoTuningData, 
+                    x = "s", 
+                    y = "mse.test.mean",
+                    plot.type = "line") +
+  theme_bw()
+```
+
+### Entrenamiento con LASSO usando los parametros de lambda ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedLasso <- setHyperPars(lasso, par.vals = tunedLassoPars$x)
+tunedLassoModel <- train(tunedLasso, dataTask)
+```
+
+### Coeficientes del modelo LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoModelData <- getLearnerModel(tunedLassoModel)
+lassoCoefs <- coef(lassoModelData, s = tunedLassoPars$x$s)
+lassoCoefs
+```
+
+### Visualización de parametros
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+coefTib$LASSO <- as.vector(lassoCoefs)[-1]
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", col = "black") +
+  facet_wrap(~ Model) +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+## Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Entrenamiento Elastic Net
+elastic <- makeLearner("regr.glmnet", id = "elastic")
+```
+
+### Ajuste de lambda y alpha
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+elasticParamSpace <- makeParamSet(
+makeNumericParam("s", lower = 0, upper = 10),
+makeNumericParam("alpha", lower = 0, upper = 1))
+
+randSearchElastic <- makeTuneControlRandom(maxit = 400)
+parallelStartSocket(cpus = detectCores())
+tunedElasticPars <- tuneParams(elastic, task = dataTask,
+                               resampling = cvForTuning,
+                               par.set = elasticParamSpace,
+                               control = randSearchElastic)
+parallelStop()
+tunedElasticPars
+```
+
+### Visualización de parametros ajustados
+
+```{r warning=FALSE, echo=FALSE, error=FALSE}
+set.seed(semilla)
+
+elasticTuningData <- generateHyperParsEffectData(tunedElasticPars)
+plotHyperParsEffect(elasticTuningData, 
+                    x = "s", 
+                    y = "alpha",
+                    z = "mse.test.mean", 
+                    interpolate = "regr.kknn",
+                    plot.type = "heatmap") +
+scale_fill_gradientn(colours = terrain.colors(5)) +
+geom_point(x = tunedElasticPars$x$s, 
+           y = tunedElasticPars$x$alpha,
+           col = "white") +
+  theme_bw()
+```
+
+### Entrenamiento con hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedElastic <- setHyperPars(elastic, par.vals = tunedElasticPars$x)
+tunedElasticModel <- train(tunedElastic, dataTask)
+```
+
+## Coeficientes de los modelos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+elasticModelData <- getLearnerModel(tunedElasticModel)
+elasticCoefs <- coef(elasticModelData, s = tunedElasticPars$x$s)
+coefTib$Elastic <- as.vector(elasticCoefs)[-1]
+
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", col = "black") +
+  facet_wrap(~ Model) +
+  theme_bw()
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeWrapper <- makeTuneWrapper(ridge, resampling = cvForTuning,
+par.set = ridgeParamSpace,
+control = randSearch)
+lassoWrapper <- makeTuneWrapper(lasso, 
+                                resampling = cvForTuning,
+                                par.set = lassoParamSpace,
+                                control = randSearch)
+elasticWrapper <- makeTuneWrapper(elastic, 
+                                  resampling = cvForTuning,
+                                  par.set = elasticParamSpace,
+                                  control = randSearchElastic)
+learners = list(ridgeWrapper, lassoWrapper, elasticWrapper, "regr.lm")
+```
+
+## Valores de los modelos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+kFold3 <- makeResampleDesc("CV", iters = 3)
+parallelStartSocket(cpus = detectCores())
+bench <- benchmark(learners, dataTask, kFold3)
+parallelStop()
+bench
+```
+
+## Grafica de modelos
+
+-   Ridge
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(ridgeModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
+
+-   Lasso
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(lassoModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
+
+-   Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(elasticModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
+
+# Boston Housing {#BostonHousing}
+
+Dataset tomado de
+<https://raw.githubusercontent.com/selva86/datasets/master/BostonHousing.csv>.
+Los datos de la vivienda contienen 506 secciones censales de Boston del
+censo de 1970. Consta de 506 observaciones y 9 variables.
+
+| variable | Descripción                                                                                        |
+|----------|----------------------------------------------------------------------------------------------------|
+| crim     | Crimen per cápita por ciudad                                                                       |
+| zn       | proporción de terrenos residenciales divididos en zonas para lotes de más de 25,000 pies cuadrados |
+| indus    | proporción de acres de negocios no minoristas por ciudad                                           |
+| chas     | variable ficticia de Charles River (= 1 si el tramo limita el río, 0 de lo contrario)              |
+| nox      | concentración de óxidos nítricos (partes por 10 millones)                                          |
+| rm       | número promedio de habitaciones por vivienda                                                       |
+| age      | proporción de unidades ocupadas por sus propietarios construidas antes de 1940                     |
+| dis      | Los datos de la vivienda contienen 506 secciones censales de Boston del censo de 1970.             |
+| rad      | índice de accesibilidad a las autopistas radiales                                                  |
+| tax      | tasa de impuesto a la propiedad de valor completo por USD 10,000                                   |
+| ptratio  | tasa de impuesto a la propiedad de valor completo por USD 10,000                                   |
+| b        | 1000 (B - 0,63)\^ 2, donde B es la proporción de negros por ciudad                                 |
+| lstat    | porcentaje de estado inferior de la población                                                      |
+| medv     | valor mediano de las viviendas ocupadas por sus propietarios en USD 1000                           |
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Importar datos desde un archivo CSV en una URL
+url <- "https://raw.githubusercontent.com/selva86/datasets/master/BostonHousing.csv"
+datos <- read.csv(url)
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Visualizacion de datos cargados
+head(datos)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Correlación
+correlacion<-corrplot(cor(select(datos,-chas)))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Preparación de los datos
+X <- as.matrix(datos[, -14])  # Variables predictoras, excluyendo la columna 'medv'
+y <- datos$medv  # Variable de respuesta
+```
+
+## División de datos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# División de los datos en conjunto de entrenamiento y prueba
+train_indices <- sample(1:nrow(X), nrow(X) * 0.8)
+X_train <- X[train_indices, ]
+y_train <- y[train_indices]
+X_test <- X[-train_indices, ]
+y_test <- y[-train_indices]
+```
+
+## Modelo Ridge
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Ridge
+ridge_model <- glmnet(X_train, y_train, alpha = 0, lambda = 0.1)
+ridge_predictions <- predict(ridge_model, newx = X_test)
+ridge_rmse <- sqrt(mean((ridge_predictions - y_test)^2))
+print(paste("RMSE (Ridge):", ridge_rmse))
+
+```
+
+## Modelo LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Lasso
+lasso_model <- glmnet(X_train, y_train, alpha = 1, lambda = 0.1)
+lasso_predictions <- predict(lasso_model, newx = X_test)
+lasso_rmse <- sqrt(mean((lasso_predictions - y_test)^2))
+print(paste("RMSE (Lasso):", lasso_rmse))
+
+```
+
+## Modelo Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Elastic Net
+elasticnet_model <- glmnet(X_train, y_train, alpha = 0.5, lambda = 0.1)
+elasticnet_predictions <- predict(elasticnet_model, newx = X_test)
+elasticnet_rmse <- sqrt(mean((elasticnet_predictions - y_test)^2))
+print(paste("RMSE (Elastic Net):", elasticnet_rmse))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+colores <- c("red", "blue", "green")
+plot(1, 
+     elasticnet_rmse, 
+     type = "b", 
+     col = colores[1], 
+     ylim = range(c(elasticnet_rmse, ridge_rmse, lasso_rmse)), 
+     xlab = "", 
+     ylab = "RMSE")
+
+points(1, ridge_rmse, type = "b", col = colores[2])
+points(1, lasso_rmse, type = "b", col = colores[3])
+legend("topright", 
+       legend = c("ElasticNet", "Ridge", "Lasso"), 
+       col = colores, pch = 1)
+
+text(1, elasticnet_rmse, labels = elasticnet_rmse, pos = 3, offset = 0.5)
+text(1, ridge_rmse, labels = ridge_rmse, pos = 1, offset = 0.5)
+text(1, lasso_rmse, labels = lasso_rmse, pos = 1, offset = 0.5)
+
+
+```
+
+# CO2 {#CO2}
+
+Dataset presente en las librerías base de R.
+
+Consta de 84 observaciones y 5 variables.
+
+| Variable  | Descripción                                                                                                       |
+|-----------|-------------------------------------------------------------------------------------------------------------------|
+| Plant     | un factor ordenado con niveles \< \< \< ... \< dando un identificador único para cada planta.Qn1 Qn2 Qn3 Mc1      |
+| Type      | Tipo de tratamiento aplicado a las plantas, que puede ser "Quebec" o "Mississippi"                                |
+| Treatment | Tipo de tratamiento aplicado a las plantas, que puede ser "nonchilled" (no refrigerado) o "chilled" (refrigerado) |
+| conc      | Concentración nominal de CO2 en partes por millón                                                                 |
+| uptake    | Tasa de absorción de CO2 por parte de las plantas, medida en unidades de "uptake" (absorción)                     |
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Carga del conjunto de datos CO2
+data(CO2)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Visualizacion de datos cargados
+head(CO2)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Correlación entre las variables númericas
+mat_cor <- CO2[,c(4:5)] %>% cor(method="pearson") %>% round(digits=2)
+
+# Mapa de calor de la correlación
+corrplot(mat_cor, 
+         method = "color",
+         addgrid.col = 'white',
+         number.cex = 0.8,
+         addCoef.col = "white"
+         )
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Agregar variables altamente correlacionadas
+CO2$Variable1 <- CO2$uptake + rnorm(nrow(CO2), mean = 0, sd = 0.1)
+CO2$Variable2 <- CO2$uptake + rnorm(nrow(CO2), mean = 0, sd = 0.1)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Correlación entre las variables númericas
+mat_cor <- CO2[,c(4:7)] %>% cor(method="pearson") %>% round(digits=2)
+
+# Mapa de calor de la correlación
+corrplot(mat_cor, 
+         method = "color",
+         addgrid.col = 'white',
+         number.cex = 0.8,
+         addCoef.col = "white"
+         )
+```
+
+## Preparación de los datos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Preparación de los datos
+X <- model.matrix(uptake ~ Type + Variable1 + Variable2 - 1, data = CO2)
+y <- CO2$uptake
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# División de los datos en conjunto de entrenamiento y prueba
+train_indices <- sample(1:nrow(X), nrow(X) * 0.8)
+X_train <- X[train_indices, ]
+y_train <- y[train_indices]
+X_test <- X[-train_indices, ]
+y_test <- y[-train_indices]
+```
+
+## Modelo Ridge
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Ridge
+ridge_model <- glmnet(X_train, y_train, alpha = 0, lambda = 0.1)
+ridge_predictions <- predict(ridge_model, newx = X_test)
+ridge_rmse <- sqrt(mean((ridge_predictions - y_test)^2))
+print(paste("RMSE (Ridge):", ridge_rmse))
+
+```
+
+## Modelo LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Lasso
+lasso_model <- glmnet(X_train, y_train, alpha = 1, lambda = 0.1)
+lasso_predictions <- predict(lasso_model, newx = X_test)
+lasso_rmse <- sqrt(mean((lasso_predictions - y_test)^2))
+print(paste("RMSE (Lasso):", lasso_rmse))
+
+```
+
+## Modelo Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Elastic Net
+elasticnet_model <- glmnet(X_train, y_train, alpha = 0.5, lambda = 0.1)
+elasticnet_predictions <- predict(elasticnet_model, newx = as.matrix(X_test))
+elasticnet_rmse <- sqrt(mean((elasticnet_predictions - y_test)^2))
+print(paste("RMSE (Elastic Net):", elasticnet_rmse))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+colores <- c("red", "blue", "green")
+plot(1, 
+     elasticnet_rmse, 
+     type = "b", 
+     col = colores[1], 
+     ylim = range(c(elasticnet_rmse, ridge_rmse, lasso_rmse)), 
+     xlab = "", 
+     ylab = "RMSE")
+
+points(1, ridge_rmse, type = "b", col = colores[2])
+points(1, lasso_rmse, type = "b", col = colores[3])
+legend("topright", 
+       legend = c("ElasticNet", "Ridge", "Lasso"), 
+       col = colores, pch = 1)
+
+text(1, elasticnet_rmse, labels = elasticnet_rmse, pos = 3, offset = 0.5)
+text(1, ridge_rmse, labels = ridge_rmse, pos = 2, offset = 0.5)
+text(1, lasso_rmse, labels = lasso_rmse, pos = 1, offset = 0.5)
+
+```
+
+# IOWA {#iowa}
+
+Dataset presente en el uso de la librería "lasso2".
+
+Los datos indican las precipitaciones en la pretemporada cosecha y en
+los tres meses de crecimiento, las temperaturas medias en los tres meses
+de crecimiento y en el mes de la cosecha, el año y el rendimiento del
+trigo en el estado de Iowa (EE.UU.) entre 1930 y 1962.
+
+Consta de 33 observaciones y 10 variables.
+
+| Variable | Descripción                                                        |
+|----------|--------------------------------------------------------------------|
+| Year     | Año de medición (sustituto de las mejoras varietales)              |
+| Rain0    | Precipitaciones de la estación (pulg.)                             |
+| Temp1    | Temperatura media del primer mes de cultivo (grados Fahrenheit)    |
+| Rain1    | Precipitaciones del primer mes de cultivo (pulg.)                  |
+| Temp2    | Temperatura media del segundo mes de cultivo (grados Fahrenheit)   |
+| Rain2    | Precipitaciones del segundo mes de cultivo (pulg.)                 |
+| Temp3    | Temperatura media del tercer mes de vegetación (grados F)          |
+| Rain3    | Precipitaciones del tercer mes de cultivo (pulg.)                  |
+| Temp4    | Temperatura media del mes de la cosecha (grados Fahrenheit)        |
+| Yield    | Rendimiento del trigo en Iowa para el año en cuestión (bush./acre) |
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+data(Iowa, package = "lasso2")
+iowaTib <- as_tibble(Iowa)
+#iowaTib <- as_tibble(data)
+iowaTib
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Cantidad de valores nulos
+sum(is.na(iowaTib))
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Ubicacion de los valores nulos en las columnas
+sapply(iowaTib, function(x)sum(is.na(x)))
+```
+
+Vista de datos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+iowaUntidy <- gather(iowaTib, "Variable", "Value", -Yield)
+ggplot(iowaUntidy, aes(Value, Yield)) +
+  facet_wrap(~ Variable, scales = "free_x") +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme_bw()
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Correlación entre las variables númericas
+mat_cor <- Iowa %>% cor(method="pearson") %>% round(digits=2)
+
+# Mapa de calor de la correlación
+corrplot(mat_cor, 
+         method = "color")
+```
+
+## Ridge
+
+```{r warning=FALSE}
+iowaTask <- makeRegrTask(data = iowaTib, target = "Yield")
+ridge <- makeLearner("regr.glmnet", alpha = 0, id = "ridge")
+```
+
+### Visualización de Datos Filtrados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+filterVals <- generateFilterValuesData(iowaTask)
+plotFilterValues(filterVals) + 
+  theme_bw()
+```
+
+### Mejorando hiperparámetros lambda (s)
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeParamSpace <- makeParamSet(
+  makeNumericParam("s", lower = 0, upper = 15))
+
+randSearch <- makeTuneControlRandom(maxit = 200)
+cvForTuning <- makeResampleDesc("RepCV", folds = 3, reps = 10)
+
+
+parallelStartSocket(cpus = detectCores())
+tunedRidgePars <- tuneParams(ridge, task = iowaTask,
+                             resampling = cvForTuning,
+                             par.set = ridgeParamSpace,
+                             control = randSearch)
+parallelStop()
+tunedRidgePars
+```
+
+### Visualización de los hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeTuningData <- generateHyperParsEffectData(tunedRidgePars)
+plotHyperParsEffect(ridgeTuningData, 
+                    x = "s", 
+                    y = "mse.test.mean",
+                    plot.type = "line") +
+  theme_bw()
+```
+
+### Entrenamiento con Ridge usando los parametros de lambda ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedRidge <- setHyperPars(ridge, par.vals = tunedRidgePars$x)
+tunedRidgeModel <- train(tunedRidge, iowaTask)
+```
+
+### Coeficientes del modelo
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeModelData <- getLearnerModel(tunedRidgeModel)
+ridgeCoefs <- coef(ridgeModelData, s = tunedRidgePars$x$s)
+ridgeCoefs
+```
+
+### Visualización de coeficientes
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lmCoefs <- coef(lm(Yield ~ ., data = iowaTib))
+
+coefTib <- tibble(Coef = rownames(ridgeCoefs)[-1],
+                  Ridge = as.vector(ridgeCoefs)[-1],
+                  Lm = as.vector(lmCoefs)[-1]
+)
+
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", col = "black") +
+  facet_wrap(~Model) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+```
+
+## LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lasso <- makeLearner("regr.glmnet", alpha = 1, id = "lasso")
+```
+
+### Ajuste de parámetros lambda de LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoParamSpace <- makeParamSet(
+makeNumericParam("s", lower = 0, upper = 15))
+parallelStartSocket(cpus = detectCores())
+tunedLassoPars <- tuneParams(lasso, task = iowaTask,
+resampling = cvForTuning,
+par.set = lassoParamSpace,
+control = randSearch)
+parallelStop()
+tunedLassoPars
+```
+
+### Visualización de hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoTuningData <- generateHyperParsEffectData(tunedLassoPars)
+plotHyperParsEffect(lassoTuningData, 
+                    x = "s", 
+                    y = "mse.test.mean",
+                    plot.type = "line") +
+  theme_bw()
+```
+
+### Entrenamiento con LASSO usando los parametros de lambda ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedLasso <- setHyperPars(lasso, par.vals = tunedLassoPars$x)
+tunedLassoModel <- train(tunedLasso, iowaTask)
+```
+
+### Coeficientes del modelo LASSO
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+lassoModelData <- getLearnerModel(tunedLassoModel)
+lassoCoefs <- coef(lassoModelData, s = tunedLassoPars$x$s)
+lassoCoefs
+```
+
+### Visualización de parametros
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+coefTib$LASSO <- as.vector(lassoCoefs)[-1]
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", col = "black") +
+  facet_wrap(~ Model) +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+## Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Modelo Entrenamiento Elastic Net
+elastic <- makeLearner("regr.glmnet", id = "elastic")
+```
+
+### Ajuste de lambda y alpha
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+elasticParamSpace <- makeParamSet(
+makeNumericParam("s", lower = 0, upper = 10),
+makeNumericParam("alpha", lower = 0, upper = 1))
+
+randSearchElastic <- makeTuneControlRandom(maxit = 400)
+parallelStartSocket(cpus = detectCores())
+tunedElasticPars <- tuneParams(elastic, task = iowaTask,
+                               resampling = cvForTuning,
+                               par.set = elasticParamSpace,
+                               control = randSearchElastic)
+parallelStop()
+tunedElasticPars
+```
+
+### Visualización de parametros ajustados
+
+```{r warning=FALSE, echo=FALSE, error=FALSE}
+set.seed(semilla)
+
+elasticTuningData <- generateHyperParsEffectData(tunedElasticPars)
+plotHyperParsEffect(elasticTuningData, 
+                    x = "s", 
+                    y = "alpha",
+                    z = "mse.test.mean", 
+                    interpolate = "regr.kknn",
+                    plot.type = "heatmap") +
+scale_fill_gradientn(colours = terrain.colors(5)) +
+geom_point(x = tunedElasticPars$x$s, 
+           y = tunedElasticPars$x$alpha,
+           col = "white") +
+  theme_bw()
+```
+
+### Entrenamiento con hiperparametros ajustados
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+tunedElastic <- setHyperPars(elastic, par.vals = tunedElasticPars$x)
+tunedElasticModel <- train(tunedElastic, iowaTask)
+```
+
+## Coeficientes de los modelos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+elasticModelData <- getLearnerModel(tunedElasticModel)
+elasticCoefs <- coef(elasticModelData, s = tunedElasticPars$x$s)
+coefTib$Elastic <- as.vector(elasticCoefs)[-1]
+
+coefUntidy <- gather(coefTib, key = Model, value = Beta, -Coef)
+ggplot(coefUntidy, aes(reorder(Coef, Beta), Beta, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", col = "black") +
+  facet_wrap(~ Model) +
+  theme_bw()
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+ridgeWrapper <- makeTuneWrapper(ridge, resampling = cvForTuning,
+par.set = ridgeParamSpace,
+control = randSearch)
+lassoWrapper <- makeTuneWrapper(lasso, 
+                                resampling = cvForTuning,
+                                par.set = lassoParamSpace,
+                                control = randSearch)
+elasticWrapper <- makeTuneWrapper(elastic, 
+                                  resampling = cvForTuning,
+                                  par.set = elasticParamSpace,
+                                  control = randSearchElastic)
+learners = list(ridgeWrapper, lassoWrapper, elasticWrapper, "regr.lm")
+```
+
+## Valores de los modelos
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+kFold3 <- makeResampleDesc("CV", iters = 3)
+parallelStartSocket(cpus = detectCores())
+bench <- benchmark(learners, iowaTask, kFold3)
+parallelStop()
+bench
+```
+
+## Grafica de modelos
+
+-   Ridge
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(ridgeModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
+
+-   Lasso
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(lassoModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
+
+-   Elastic Net
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+start_time <- Sys.time()  # Registra el tiempo de inicio
+plotres(elasticModelData)
+end_time <- Sys.time()  # Registra el tiempo de finalización
+execution_time <- end_time - start_time  # Calcula el tiempo de ejecución
+print(execution_time)  # Imprime el tiempo de ejecución
+```
