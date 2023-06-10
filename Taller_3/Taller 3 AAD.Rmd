@@ -1,0 +1,845 @@
+---
+title: "Taller 3 - Maestria en Matemáticas Aplicadas y Ciencias de la Computación"
+author: "Jorge Esneider Henao - Diego Alberto Rodríguez Cruz - Hector Leandro Rojas"
+date: "`r Sys.Date()`"
+lang: es
+output:
+  rmdformats::downcute
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Dependencias {#dependencias}
+
+-   ´install.packages("tibble")´
+-   ´install.packages("ggplot2")´
+-   ´install.packages("reshape2")´
+-   ´install.packages("readxl")´
+-   ´install.packages("ROCR")´
+-   ´install.packages("RODBC")´
+-   ´install.packages("mice")´
+-   ´install.packages("mclust")´
+-   ´install.packages("MASS")´
+
+# Librerías {#librerias}
+
+```{r warning=FALSE, message=FALSE}
+#Carga de librerias
+library(tibble)
+library(ggplot2)
+library(reshape2)
+library(readxl)
+library(ROCR)
+library(RODBC)
+library(mice)
+library(mclust)
+library(MASS)
+```
+
+# Variable(s) Global(es)
+
+```{r warning=FALSE, message=FALSE}
+#Definicion del valor de la semilla global
+semilla <- 123
+```
+
+# Problema 1 {#problema1}
+
+Una familia de distribuciones P$_\theta$ con $\theta$ $\in$ $\Theta$
+pertenece a la familia exponencial de distribucciones si su
+$\frac{fmp}{fdp}$ puede escribirse como:
+$p(x|\eta) = h(x)exp(\eta(\theta)t(x)-\alpha(\theta)$
+
+Para funciones reales $h(x)$, $\alpha(\theta)$ y $t(x)$. Muestre que
+tanto la distribución bernoulli (utilizada para la regresión logística),
+la distribución normal (utilizada en la regresión lineal) y la
+distribución Poisson (utilizada en la regresión Poisson sobre conteos)
+pertenecen a esta familia de distribuciones.
+
+**Respuesta**
+
+En cuanto a las distribuciones que pertenecen a la familia exponencial
+se denomina familia exponencial de un parámetro si se tiene o existen
+funciones de la forma
+
+$$p = { p\_{\theta}: \theta \in \Theta }$$
+
+será denominado de la familia exponencial si existe un parámetro
+
+$$c(\theta), d(\theta), \theta \in \Theta$$
+
+De tal forma que la función de densidad o de probabilidad
+$p(\tilde{x},\theta)$ puede ser discreta de la siguiente forma
+
+$$p(\tilde{x},\theta) = \exp\left\{ c(\theta)T(\tilde{x})+d(\theta)+s(\tilde{x}) \right\} \cdot I_G(\tilde{x})$$
+
+Donde $I_G(\tilde{x})$ es una función indicadora de G:
+
+$$I_G(\tilde{x}) = \begin{cases} 1 & \text{si } x \leq 0 \\ 0 & \text{en otro caso} \end{cases}$$
+
+En la familia exponencial, $T(\tilde{x})$ es un estadístico suficiente y
+completo. La suficiencia de $T(\tilde{x})$ con recorrido en $I = R_T$
+para $\theta$ se da solo si existe una función $g(t,\tilde{\theta})$,
+$t \in I$, $\theta \in \Theta$, y una función $h(\tilde{x})$,
+$x \in \mathbb{R}^n$, tales que se toman como, (A, R. H., M, A. M., & C,
+D. M. (2012)) :
+
+$$p(\tilde{x},\tilde{\theta}) = g(T(\tilde{x}),\tilde{\theta}) \cdot h(\tilde{x})$$
+
+Para la función Poisson, si una variable aleatoria se distribuye
+denotada como $Y \sim \text{Pois}(\lambda)$, su función de probabilidad
+es:
+
+$$f(y;\lambda)= \frac{\lambda^ye^{-\lambda}}{y!} = \exp(y \log \lambda - \lambda - y!)$$
+
+se dice por tanto que
+
+$\alpha(y) = y, b(\lambda) = \log\lambda, c(\lambda) = -\lambda$ y
+$d(y) = \log y!$
+
+también a su vez concluyendo que esta distribucion pertenece a la famila
+exponencial
+
+Para la distribución normal, tenemos que si una variable aleatoria se
+distribuye como una normal $Y \sim N(\mu,\sigma^2)$, sea
+$\theta = (\mu,\sigma)$, su función de densidad es:
+
+$$
+f(y;\theta) = \frac{1}{\sqrt{2\pi\sigma} } \exp( -\frac{1}{2}(\frac{y-\mu}{\sigma})^2)
+\\=\exp(-\frac{1}{2\sigma^2}y^2 + \frac{\mu}{\sigma^2}y - \frac{\mu^2}{2\sigma^2} + \log (\frac{1}{\sqrt{2\pi\sigma} }))
+$$
+
+de ahi se tiene que
+
+$$
+\alpha(y) = (a_1(y),a_2(y)) = (y^2,y),
+\\b(\theta) = (b_1(\theta),b_2(\theta)) = (-\frac{1}{2\sigma^2},\frac{\mu}{\sigma^2}),
+\\c(\theta) = -\frac{\mu^2}{2\sigma^2} + \log (\frac{1}{\sqrt{2\pi\sigma}}) ,
+\\d(y) = 0
+$$
+
+tambien a su vez concluyendo que esta distribucion normal pertenece a la
+famila exponencial
+
+Respecto a Bernoulli Una variable aleatoria de Bernoulli $X$ asigna una
+medida de probabilidad $\pi$ al punto $x = 1$ y medida de probabilidad
+$1 - \pi$ al punto $x = 0$. Más formalmente, se define como la medida de
+conteo en $\{0, 1\}$, y se define la siguiente función de densidad con
+respecto a la medida $v$ Jordan(2009):
+
+$$
+p(x|\pi) = \pi^x(1-\pi)^{1-x}
+\\= \exp\{ \log (\frac{\pi}{1-\pi}) x + \log (1 - \pi )\}
+$$
+
+para revelar o encontrar su forma canonica como parte de la familia
+exponencial tomamos es tomar la exponencial del logaritmo de la forma
+"usual" de la densidad, por tanto
+
+$$\eta = \frac{\pi}{1-\pi}
+\\T=x
+\\A(\eta) = -\log(1-\pi) = \log(1+e^\eta)
+\\h(x) = 1
+$$
+
+de donde tenemos que para n
+
+$$
+\pi = \frac{1}{1+e^{-n}}, \text {que no es más que la función logística}
+$$
+
+# Problema 2 {#problema2}
+
+La Universidad de California Irvine (UCI) tiene un repositorio de datos
+de ejemplo para el uso de machine learning y aprendizaje estadístico.
+Uno de los conjuntos de datos es el denominado Heart Disease, su
+descripción detallada se encuentra en la URL a continuación:
+<https://archive.ics.uci.edu/ml/datasets/Heart+Disease>
+
+Como podrá ver, estos datos se encuentran disponibles para su uso en la
+siguiente URL:
+<https://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/>
+
+Utilice los datos procesados disponibles en el enlace presentado a
+continuación para el desarrollo del ejercicio,
+
+<http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data>
+
+Con el conjunto de datos completo, construya un modelo de regresión
+logístico con función de enlace logit tomando como respuesta la
+presencia de la enfermedad cardiaca, use las demás variables como
+explicativas en el modelo de regresión. Revise las URL dadas para la
+definición de cada una de las variables y note que debe obtener la
+variable respuesta categorizando una de las variables del conjunto de
+datos. Siga los siguientes pasos en la realización del ejercicio:
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#carga de datos
+data <- read.csv('processed.cleveland.data',na= '?', sep=",", header = FALSE)
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Asignación de Nombres de columnas
+nombre_columna <- c("age","sex","cp ","trestbps","chol","fbs","restecg","thalach","exang","oldpeak","slope","ca","thal","num")
+
+colnames(data)<-nombre_columna
+
+dataSinTransformar <- data
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Visualización 10 registros de los datos cargados
+head(data,10)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Resumen estadistico de los datos
+summary(data)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Cantidad de columnas y filas
+cat ('Cantidad Columnas ',ncol(data),'\n')
+cat ('Cantidad Filas ',nrow(data),'\n')
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Cantidad de nulos/NA en el conjunto de datos
+sum(is.na(data))
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Ubicacion de los valores nulos en las columnas
+sapply(data, function(x)sum(is.na(x)))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Conversión a factor, con el fin de trabajar con variables categoricas y nominales
+data$age <- as.numeric(data$age)
+data$sex <- factor(data$sex, levels = c(0, 1), labels = c("F", "M"))
+data$trestbps <- as.numeric(data$trestbps)
+data$chol <- as.numeric(data$chol)
+data$fbs <- factor(data$fbs, levels = c(0, 1), labels = c("False", "True"))
+data$restecg <- factor(data$restecg)
+data$thalach <- as.numeric(data$thalach)
+data$exang <- factor(data$exang, levels = c(0, 1), labels = c("False", "True"))
+data$oldpeak <- as.numeric(data$oldpeak)
+data$slope <- factor(data$slope)
+data$ca <- factor(data$ca)
+data$thal <- factor(data$thal)
+data$num <- ifelse(data$num == 0, "Healthy", "Unhealthy")
+
+```
+
+## Punto 1: Imputar datos:
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+data <- data.frame(apply(data, 2, function(x) ifelse(is.na(x), median(x, na.rm = TRUE), x)))
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+data$age <- as.numeric(data$age)
+data$sex <- as.factor(data$sex)
+data$trestbps <- as.numeric(data$trestbps)
+data$chol <- as.numeric(data$chol)
+data$fbs <- as.factor(data$fbs)
+data$restecg <- as.factor(data$restecg)
+data$thalach <- as.numeric(data$thalach)
+data$exang <- as.factor(data$exang)
+data$oldpeak <- as.numeric(data$oldpeak)
+data$slope <- as.factor(data$slope)
+data$ca <- as.factor(data$ca)
+data$thal <- as.factor(data$thal)
+data$num <- as.factor(data$num)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Cantidad de nulos luego de la imputación de datos
+sum(is.na(data))
+```
+
+## Punto 2: Revisar las distribuciones bivariadas
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#analisis univariado de los datos
+d <- data.frame(data)
+
+melt(d)%>%
+  ggplot(aes(x=value, fill=variable)) +
+  geom_density(alpha=0.3)+
+  labs(x= "",
+       subtitle="Density Plot")
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Variables categóricas en el conjunto de datos
+covariables_categoricas <- c("sex")
+
+# Variable respuesta en el conjunto de datos
+variable_respuesta <- "num"
+
+# Revisar la distribución bivariada para cada covariable categórica
+for (covariable in covariables_categoricas) {
+  # Tabla de contingencia
+  tabla_contingencia <- table(data[[covariable]], data[[variable_respuesta]])
+  
+  # Gráfico de barras
+  barplot(tabla_contingencia, beside = TRUE, legend.text = TRUE, xlab = covariable, ylab = "Frecuencia")
+}
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Tabla de contigencia sex ~ num
+print(tabla_contingencia)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#cp: chest pain type
+#        -- Value 1: typical angina
+#        -- Value 2: atypical angina
+#        -- Value 3: non-anginal pain
+#        -- Value 4: asymptomatic
+
+# Tabla de contigencia cp ~ num
+tabla_contingencia2 <- table(data$cp, data$num)
+tabla_contingencia2
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#fbs: (fasting blood sugar > 120 mg/dl)  (1 = true; 0 = false)
+
+# Tabla de contigencia fbs ~ num
+tabla_contingencia3 <- table(data$fbs, data$num)
+tabla_contingencia3
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#restecg: resting electrocardiographic results
+#        -- Value 0: normal
+#        -- Value 1: having ST-T wave abnormality (T wave inversions and/or ST 
+#                    elevation or depression of > 0.05 mV)
+#        -- Value 2: showing probable or definite left ventricular hypertrophy
+#                    by Estes' criteria
+
+# Tabla de contigencia restecg ~ num
+tabla_contingencia4 <- table(data$restecg, data$num)
+tabla_contingencia4
+
+```
+
+## Punto 3: Modelo bivariado
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+d$num <- ifelse(data$num == 0, yes = 0, no = 1)
+logistic_model <- glm(fbs ~ num, data=data, family=binomial)
+summary(logistic_model)$coefficients
+```
+
+## Punto 4: Modelo multivariado:
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Modelo Multivariado con todas las variables
+logistic_model <- glm(num ~ ., data = data, family = binomial)
+summary(logistic_model)$coefficients
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Obtener el resumen de los coeficientes del modelo
+summary_coefs <- summary(logistic_model)$coefficients
+
+# Filtrar las variables significativas según el test de Wald (valor de p < 0.05)
+variables_significativas <- summary_coefs[summary_coefs[, "Pr(>|z|)"] < 0.05, ]
+
+# Filtrar las variables no significativas según el test de Wald (valor de p >= 0.05)
+variables_no_significativas <- summary_coefs[summary_coefs[, "Pr(>|z|)"] >= 0.05, ]
+
+# Imprimir las variables significativas
+cat("Variables significativas mediante el test de Wald:\n")
+print(variables_significativas)
+cat("\n")
+cat("\n")
+# Imprimir las variables no significativas
+cat("Variables no significativas mediante el test de Wald:\n")
+print(variables_no_significativas)
+cat("\n")
+cat("\n")
+```
+
+## Punto 5: Visualización de probabilidades predichas bajo modelo multivariado
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Obtener las probabilidades predichas
+probabilidades_predichas <- predict(logistic_model, type = "response")
+
+# Crear un nuevo dataframe con la variable respuesta y las probabilidades predichas
+datos_probabilidades <- data.frame(Enfermedad_Cardiaca = d$num, Probabilidades = probabilidades_predichas)
+
+# Graficar las probabilidades predichas junto a la variable respuesta
+plot(Probabilidades ~ Enfermedad_Cardiaca, data = datos_probabilidades, 
+     type = "n", xlab = "Enfermedad Cardiaca", ylab = "Probabilidades")
+points(jitter(Enfermedad_Cardiaca) ~ Probabilidades, data = datos_probabilidades, 
+       col = ifelse(Enfermedad_Cardiaca == 1, "red", "blue"), pch = 16, alpha = 0.5)
+legend("topright", legend = c("Sin Enfermedad Cardiaca", "Con Enfermedad Cardiaca"),
+       col = c("blue", "red"), pch = 16, pt.cex = 1.5, bty = "n")
+
+```
+
+Después de realizar el modelo anterior, se evidencia que la tendencia es
+a padecer más una enfermedad cardiaca de acuerdo a un FBS alto; se
+evidencio que el sexo femenino tiene la tendencia a ser no saludable en
+cuanto a enfermedad cardiaca.
+
+# Problema 3 {#problema3}
+
+El conjunto de datos AAD-taller03.xlsx contiene la predicción de
+incumplimiento de pago de tarjeta de cr´edito bajo dos modelos
+log´ısticos diferentes para un total de 9080 clientes. Se cuenta además
+con la variable de incumplimiento observada al finalizar el periodo.
+¿Cuál de los dos modelos logísticos tiene mayor poder de predicción?
+Explique con fundamento estad´ıstico su resultado.
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#carga de datos
+datos <- read_excel('AAD-taller03.xlsx',sheet = 'Sheet1')
+datos <-data.frame(datos)
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#visualización de datos
+head(datos)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+scorea <- datos$ScoreLogisticoA
+incumplimiento <- datos$Incumplimiento
+
+plot(x= scorea,
+     y= incumplimiento)
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+pred <- prediction(datos$ScoreLogisticoA, datos$Incumplimiento)
+perf <- performance(pred,measure="tpr",x.measure="fpr")
+
+plot(perf,colorize=TRUE,type="l") 
+abline(a=0,b=1)
+
+# Área bajo la curva
+AUC       <- performance(pred,measure="auc")
+AUCaltura <- AUC@y.values
+
+# Punto de corte óptimo
+cost.perf <- performance(pred, measure ="cost")
+opt.cut   <- pred@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+#coordenadas del punto de corte óptimo
+x<-perf@x.values[[1]][which.min(cost.perf@y.values[[1]])]
+y<-perf@y.values[[1]][which.min(cost.perf@y.values[[1]])]
+points(x,y, pch=20, col="red")
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+cat("AUC:", AUCaltura[[1]]) 
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+cat("Punto de corte óptimo:",opt.cut)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+pred <- prediction(datos$ScoreLogisticoB, datos$Incumplimiento)
+perf <- performance(pred,measure="tpr",x.measure="fpr")
+
+plot(perf,colorize=TRUE,type="l") 
+abline(a=0,b=1)
+
+# Área bajo la curva
+AUC       <- performance(pred,measure="auc")
+AUCaltura <- AUC@y.values
+
+# Punto de corte óptimo
+cost.perf <- performance(pred, measure ="cost")
+opt.cut   <- pred@cutoffs[[1]][which.min(cost.perf@y.values[[1]])]
+#coordenadas del punto de corte óptimo
+x<-perf@x.values[[1]][which.min(cost.perf@y.values[[1]])]
+y<-perf@y.values[[1]][which.min(cost.perf@y.values[[1]])]
+points(x,y, pch=20, col="red")
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+cat("AUC:", AUCaltura[[1]]) 
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+cat("Punto de corte óptimo:",opt.cut)
+```
+
+De acuerdo a los datos, se evidencia que el primero modelo
+correspondiente al ScoreA es mejor que el modelo ScoreB, sin embargo la
+predicción en conjunto es baja dado que en el ScoreA el AUC 0.60 con
+punto de corte 0.01184178 y en el ScoreB el AUC 0.32 con punto de corte
+0.01. Para mejorar los modelos antes mencionados, es necesario optimizar
+el poder de predicción de estos parametrizando los modelos logisticos
+
+# Problema 4 (opcional) {#problema4}
+
+Repita el problema 2, pero en lugar de imputar los datos mediante la
+mediana en el punto 1, utilice el algoritmo EM
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Lectura del archivo 
+dataEM <- read.csv('processed.cleveland.data', na = '?', sep = ",", header = FALSE)
+
+# Asignación de nombres de columnas
+nombre_columna <- c("age", "sex", "cp", "trestbps", "chol", "fbs", "restecg", "thalach", "exang", "oldpeak", "slope", "ca", "thal", "num")
+colnames(dataEM) <- nombre_columna
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Conversión a factor, con el fin de trabajar con variables categoricas y nominales
+dataEM$age <- as.numeric(dataEM$age)
+dataEM$sex <- factor(dataEM$sex, levels = c(0, 1), labels = c("F", "M"))
+dataEM$trestbps <- as.numeric(dataEM$trestbps)
+dataEM$chol <- as.numeric(dataEM$chol)
+dataEM$fbs <- factor(dataEM$fbs, levels = c(0, 1), labels = c("False", "True"))
+dataEM$restecg <- factor(dataEM$restecg)
+dataEM$thalach <- as.numeric(dataEM$thalach)
+dataEM$exang <- factor(dataEM$exang, levels = c(0, 1), labels = c("False", "True"))
+dataEM$oldpeak <- as.numeric(dataEM$oldpeak)
+dataEM$slope <- factor(dataEM$slope)
+dataEM$ca <- factor(dataEM$ca)
+dataEM$thal <- factor(dataEM$thal)
+dataEM$num <- ifelse(dataEM$num == 0, "Healthy", "Unhealthy")
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#visualizacion de datos, primero 10 registros
+head(dataEM, 10)
+```
+
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Cantidad de nulos luego de la imputación de datos
+sum(is.na(dataEM))
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Ubicacion de los valores nulos en las columnas
+sapply(dataEM, function(x)sum(is.na(x)))
+```
+
+## Punto 1: Imputar datos con algoritmo EM
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Imputación de valores perdidos utilizando el algoritmo EM
+imp_data <- mice(dataEM)
+
+# Obtenemos el conjunto completo de datos imputados
+data_imputed <- complete(imp_data)
+
+```
+
+```{r warning=FALSE}
+# Establecemos la semilla
+set.seed(semilla)
+
+# Convertimos el resultado en un data frame
+dataEM <- as.data.frame(data_imputed)
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Perform EM algorithm for Gaussian Mixture Model estimation
+gmm_model <- Mclust(dataEM, G = 2)  # Specify the desired number of components (clusters)
+
+# Extract the estimated parameters from the GMM model
+estimated_means <- gmm_model$parameters$mean
+estimated_covariance <- gmm_model$parameters$cov
+
+# Print the estimated means and covariance matrices
+cat("\nEstimated Means:\n")
+print(estimated_means)
+
+cat("\nEstimated Covariance Matrices:\n")
+print(estimated_covariance)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+dataEM$age <- as.numeric(dataEM$age)
+dataEM$sex <- as.factor(dataEM$sex)
+dataEM$trestbps <- as.numeric(dataEM$trestbps)
+dataEM$chol <- as.numeric(dataEM$chol)
+dataEM$fbs <- as.factor(dataEM$fbs)
+dataEM$restecg <- as.factor(dataEM$restecg)
+dataEM$thalach <- as.numeric(dataEM$thalach)
+dataEM$exang <- as.factor(dataEM$exang)
+dataEM$oldpeak <- as.numeric(dataEM$oldpeak)
+dataEM$slope <- as.factor(dataEM$slope)
+dataEM$ca <- as.factor(dataEM$ca)
+dataEM$thal <- as.factor(dataEM$thal)
+dataEM$num <- as.factor(dataEM$num)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Cantidad de nulos luego de la imputación de datos
+sum(is.na(dataEM))
+```
+
+## Punto 2: Revisar las distribuciones bivariadas
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#analisis univariado de los datos
+d <- data.frame(dataEM)
+
+melt(d)%>%
+  ggplot(aes(x=value, fill=variable)) +
+  geom_density(alpha=0.3)+
+  labs(x= "",
+       subtitle="Density Plot")
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Variables categóricas en el conjunto de datos
+covariables_categoricas <- c("sex")
+
+# Variable respuesta en el conjunto de datos
+variable_respuesta <- "num"
+
+# Revisar la distribución bivariada para cada covariable categórica
+for (covariable in covariables_categoricas) {
+  # Tabla de contingencia
+  tabla_contingencia <- table(dataEM[[covariable]], dataEM[[variable_respuesta]])
+  
+  # Gráfico de barras
+  barplot(tabla_contingencia, beside = TRUE, legend.text = TRUE, xlab = covariable, ylab = "Frecuencia")
+}
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Tabla de contigencia sex ~ num
+print(tabla_contingencia)
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#cp: chest pain type
+#        -- Value 1: typical angina
+#        -- Value 2: atypical angina
+#        -- Value 3: non-anginal pain
+#        -- Value 4: asymptomatic
+
+# Tabla de contigencia cp ~ num
+tabla_contingencia2 <- table(dataEM$cp, dataEM$num)
+tabla_contingencia2
+
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#fbs: (fasting blood sugar > 120 mg/dl)  (1 = true; 0 = false)
+
+# Tabla de contigencia fbs ~ num
+tabla_contingencia3 <- table(dataEM$fbs, dataEM$num)
+tabla_contingencia3
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#restecg: resting electrocardiographic results
+#        -- Value 0: normal
+#        -- Value 1: having ST-T wave abnormality (T wave inversions and/or ST 
+#                    elevation or depression of > 0.05 mV)
+#        -- Value 2: showing probable or definite left ventricular hypertrophy
+#                    by Estes' criteria
+
+# Tabla de contigencia restecg ~ num
+tabla_contingencia4 <- table(dataEM$restecg, dataEM$num)
+tabla_contingencia4
+
+```
+
+## Punto 3: Modelo bivariado
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+d$num <- ifelse(dataEM$num == 0, yes = 0, no = 1)
+logistic_model <- glm(fbs ~ num, data=dataEM, family=binomial)
+summary(logistic_model)$coefficients
+```
+
+## Punto 4: Modelo multivariado:
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+#Modelo Multivariado con todas las variables
+logistic_model <- glm(num ~ ., data = dataEM, family = binomial)
+summary(logistic_model)$coefficients
+```
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Obtener el resumen de los coeficientes del modelo
+summary_coefs <- summary(logistic_model)$coefficients
+
+# Filtrar las variables significativas según el test de Wald (valor de p < 0.05)
+variables_significativas <- summary_coefs[summary_coefs[, "Pr(>|z|)"] < 0.05, ]
+
+# Filtrar las variables no significativas según el test de Wald (valor de p >= 0.05)
+variables_no_significativas <- summary_coefs[summary_coefs[, "Pr(>|z|)"] >= 0.05, ]
+
+# Imprimir las variables significativas
+cat("Variables significativas mediante el test de Wald:\n")
+print(variables_significativas)
+cat("\n")
+cat("\n")
+# Imprimir las variables no significativas
+cat("Variables no significativas mediante el test de Wald:\n")
+print(variables_no_significativas)
+cat("\n")
+cat("\n")
+```
+
+## Punto 5: Visualización de probabilidades predichas bajo modelo multivariado
+
+```{r warning=FALSE}
+set.seed(semilla)
+
+# Obtener las probabilidades predichas
+probabilidades_predichas <- predict(logistic_model, type = "response")
+
+# Crear un nuevo dataframe con la variable respuesta y las probabilidades predichas
+datos_probabilidades <- data.frame(Enfermedad_Cardiaca = d$num, Probabilidades = probabilidades_predichas)
+
+# Graficar las probabilidades predichas junto a la variable respuesta
+plot(Probabilidades ~ Enfermedad_Cardiaca, data = datos_probabilidades, 
+     type = "n", xlab = "Enfermedad Cardiaca", ylab = "Probabilidades")
+points(jitter(Enfermedad_Cardiaca) ~ Probabilidades, data = datos_probabilidades, 
+       col = ifelse(Enfermedad_Cardiaca == 1, "red", "blue"), pch = 16, alpha = 0.5)
+legend("topright", legend = c("Sin Enfermedad Cardiaca", "Con Enfermedad Cardiaca"),
+       col = c("blue", "red"), pch = 16, pt.cex = 1.5, bty = "n")
+
+```
+
+Aplicando el algoritmo EM, se evidencia el mismo comportamiento de los
+datos como en el [Problema 2](#problema2)
+
+# Bibliografía {#bibliografia}
+
+-   Martínez Gutiérrez, A. (2017). *Análisis de las primas de riesgo en
+    seguros de automóviles: una aplicación de los modelos lineales
+    generalizados* (p. n583xt99h) [Maestro en Ciencias, Universidad
+    Autónoma Metropolitana Unidad Iztapalapa].
+    [https://doi.org/10.24275/uami.n](https://doi.org/10.24275/uami.n583xt99h)[e.12.637](https://doi.org/10.18041/1909-2458/ingeniare.12.637)
+
+-   A, R. H., M, A. M., & C, D. M. (2012). Modelos de la Familia
+    Exponencial. *Ingeniare*, *12*, Article 12.
+    <https://doi.org/10.18041/1909-2458/ingeniare.12.637>
+
+-   Michael I. Jordan. The exponential family: Basics. 2009. URL
+    <https://people.eecs>.
+    berkeley.edu/\~jordan/courses/260-spring10/other-readings/chapter8.pdf.
