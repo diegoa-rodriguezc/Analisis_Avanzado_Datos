@@ -31,13 +31,16 @@ knitr::opts_chunk$set(echo = TRUE)
 -   ´install.packages("parallel")´
 -   ´install.packages("parallelMap")´
 -   ´install.packages("kknn")´
+-   ´install.packages("Formula")´
+-   ´install.packages("plotrix")´
+-   ´install.packages("TeachingDemos")´
 -   ´install.packages("plotmo")´
 -   ´install.packages("corrplot")´
 -   ´install.packages("glmnet")´
 
 # Librerías
 
-```{r warning=FALSE}
+```{r warning=FALSE, echo=FALSE}
 library(lasso2)
 library(tidyverse)
 library(FSelectorRcpp)
@@ -46,6 +49,9 @@ library(mlr)
 library(parallel)
 library(parallelMap)
 library(kknn)
+library(Formula)
+library(plotrix)
+library(TeachingDemos)
 library(plotmo)
 library(corrplot)
 library(glmnet)
@@ -55,7 +61,7 @@ library(glmnet)
 
 ```{r warning=FALSE, message=FALSE}
 #Definicion del valor de la semilla global
-semilla <- 123456
+semilla <- 123
 set.seed(semilla)
 ```
 
